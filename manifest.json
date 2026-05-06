@@ -1,0 +1,20 @@
+{
+  "id": "statuses",
+  "name": "Custom Statuses",
+  "version": "1.1.0",
+  "description": "Adds custom status columns to tasks through a compact dropdown. Required by Kanban and other workflow plugins.",
+  "author": "TaskFlow",
+  "permissions": [
+    "tasks.read",
+    "tasks.write",
+    "plugin.storage"
+  ],
+  "entrypoints": [
+    {
+      "id": "task-status",
+      "type": "task_detail",
+      "title": "Status",
+      "file": "index.html"
+    }
+  ]
+}

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Task Status</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --color-background: transparent;
+        --color-surface: #ffffff;
+        --color-card: #f9fafb;
+        --color-foreground: #111827;
+        --color-muted-fg: #6b7280;
+        --color-border: #e5e7eb;
+        --color-input: #ffffff;
+        --color-primary: #191c17;
+        --color-primary-fg: #f5f7f2;
+        --color-ring: rgba(25, 28, 23, 0.18);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 0;
+        background: var(--color-background);
+        color: var(--color-foreground);
+        overflow: hidden;
+        touch-action: pan-y;
+      }
+
+      body {
+        padding: 18px 28px 20px;
+        transition: background-color 160ms ease, color 160ms ease;
+      }
+
+      .status-container {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        touch-action: pan-y;
+      }
+
+      .status-label {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 1px;
+        color: var(--color-muted-fg);
+        text-transform: uppercase;
+      }
+
+      .status-select-wrap {
+        position: relative;
+        max-width: 320px;
+      }
+
+      .status-select-wrap::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        right: 15px;
+        width: 0;
+        height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 5px solid var(--color-muted-fg);
+        pointer-events: none;
+        transform: translateY(-35%);
+      }
+
+      .status-select {
+        width: 100%;
+        height: 42px;
+        appearance: none;
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        background: var(--color-input);
+        color: var(--color-foreground);
+        padding: 0 36px 0 14px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+        font-family: "SF Mono", "IBM Plex Mono", "Courier New", monospace;
+        touch-action: pan-y;
+      }
+
+      .status-select:hover {
+        border-color: var(--color-primary);
+        background: var(--color-card);
+      }
+
+      .status-select:focus {
+        outline: none;
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 3px var(--color-ring);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="status-container">
+      <label class="status-label" for="status-select">Task Status</label>
+      <div class="status-select-wrap">
+        <select class="status-select" id="status-select"></select>
+      </div>
+    </div>
+
+    <script>
+      const COLUMNS_KEY = "plugin_statuses_columns";
+
+      let appState = window.__TASKFLOW_INITIAL_STATE || {};
+      let columns = [
+        { id: "todo", title: "To Do" },
+        { id: "doing", title: "In Progress" },
+        { id: "review", title: "In Review" },
+        { id: "done", title: "Done" },
+      ];
+
+      function applyTheme(theme) {
+        if (!theme) return;
+        const root = document.documentElement;
+        if (theme.mode === "dark") {
+          root.style.setProperty("--color-background", "transparent");
+          root.style.setProperty("--color-surface", "#1f2937");
+          root.style.setProperty("--color-card", "#111827");
+          root.style.setProperty("--color-foreground", "#f9fafb");
+          root.style.setProperty("--color-muted-fg", "#9ca3af");
+          root.style.setProperty("--color-border", "#374151");
+          root.style.setProperty("--color-input", "#1f2937");
+          root.style.setProperty("--color-primary", "#f9fafb");
+          root.style.setProperty("--color-primary-fg", "#111827");
+          root.style.setProperty("--color-ring", "rgba(249, 250, 251, 0.18)");
+        }
+      }
+
+      function fallbackTheme() {
+        const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        return { mode: isDark ? "dark" : "light" };
+      }
+
+      async function loadStatuses() {
+        try {
+          const colsRaw = await window.taskflow.sharedStorage.get(COLUMNS_KEY);
+          if (colsRaw) {
+            columns = JSON.parse(colsRaw);
+          } else {
+            await window.taskflow.sharedStorage.set(COLUMNS_KEY, JSON.stringify(columns));
+          }
+        } catch (_) {
+          columns = [
+            { id: "todo", title: "To Do" },
+            { id: "doing", title: "In Progress" },
+            { id: "review", title: "In Review" },
+            { id: "done", title: "Done" },
+          ];
+        }
+      }
+
+      function getCurrentStatus() {
+        const task = appState.task;
+        if (task?.completed) return "done";
+        return task?.plugin_data?.statuses?.status || "todo";
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      async function setStatus(statusId) {
+        const taskId = appState.context?.taskId;
+        if (!taskId || !window.taskflow?.tasks?.setPluginData) {
+          return;
+        }
+
+        if (statusId === "done") {
+          await window.taskflow.tasks.setCompleted(taskId, true);
+          await window.taskflow.tasks.setPluginData(taskId, "statuses", { status: "done" });
+        } else {
+          await window.taskflow.tasks.setCompleted(taskId, false);
+          await window.taskflow.tasks.setPluginData(taskId, "statuses", { status: statusId });
+        }
+
+        setTimeout(() => {
+          render();
+        }, 100);
+      }
+
+      function render() {
+        const select = document.getElementById("status-select");
+        const currentStatus = getCurrentStatus();
+
+        select.innerHTML = columns
+          .map(
+            (col) => `
+            <option
+              value="${escapeHtml(col.id)}"
+              ${currentStatus === col.id ? "selected" : ""}
+            >
+              ${escapeHtml(col.title)}
+            </option>
+          `,
+          )
+          .join("");
+
+        select.onchange = () => setStatus(select.value);
+      }
+
+      window.addEventListener("taskflow:update", (event) => {
+        appState = event.detail || appState;
+        render();
+      });
+
+      (async function bootstrap() {
+        let attempts = 0;
+        while (!window.taskflow && attempts < 50) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          attempts += 1;
+        }
+
+        if (!window.taskflow) {
+          return;
+        }
+
+        applyTheme(appState.theme || window.taskflow.theme || fallbackTheme());
+        await loadStatuses();
+        render();
+      })();
+    </script>
+  </body>
+</html>
